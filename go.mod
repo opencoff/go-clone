@@ -3,8 +3,9 @@ module github.com/opencoff/go-clone
 go 1.22.2
 
 require (
-	github.com/opencoff/go-fio v0.3.1
+	github.com/opencoff/go-fio v0.4.1
 	github.com/opencoff/pflag v1.0.6-sh1
+	github.com/puzpuzpuz/xsync/v3 v3.4.0
 )
 
 require (
@@ -13,6 +14,4 @@ require (
 	golang.org/x/sys v0.26.0 // indirect
 )
 
-replace (
-	github.com/opencoff/go-fio => ../go-fio
-	)
+replace github.com/opencoff/go-fio => ../go-fio

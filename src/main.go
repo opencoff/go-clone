@@ -7,8 +7,14 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 
-	"github.com/opencoff/go-clone/lib"
+	"github.com/opencoff/go-fio"
+	"github.com/opencoff/go-fio/clone"
+	"github.com/opencoff/go-fio/cmp"
+	"github.com/opencoff/go-fio/walk"
+	"github.com/puzpuzpuz/xsync/v3"
+
 	flag "github.com/opencoff/pflag"
 )
 
@@ -55,17 +61,85 @@ func main() {
 	src := args[0]
 	dst := args[1]
 
-	if apply {
-		err = lib.CloneTree(src, dst, lib.WithConcurrency(ncpu),
-			lib.WithSingleFS(onefs), lib.WithFollowLinks(follow))
-	} else {
-		err = lib.DiffTree(os.Stdout, src, dst, lib.WithConcurrency(ncpu),
-			lib.WithSingleFS(onefs), lib.WithFollowLinks(follow))
+	si, err := fio.Lstat(src)
+	if err != nil {
+		Die("can't stat %s: %s", src, err)
 	}
 
+	if !si.IsDir() {
+		Die("%s is not a dir", src)
+	}
+
+	di, err := fio.Lstat(dst)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			Die("can't stat %s: %s", dst, err)
+		}
+	} else if !di.IsDir() {
+		Die("%s is not a dir", dst)
+	}
+
+	o := &cloneopt{
+		src:  src,
+		dst:  dst,
+		prog: progressBar(progress),
+		walkOpt: walk.Options{
+			Concurrency:    ncpu,
+			Type:           walk.ALL,
+			FollowSymlinks: follow,
+			OneFS:          onefs,
+		},
+	}
+
+	err = clone.Tree(o.dst, o.src, clone.WithObserver(o.prog), clone.WithWalkOptions(o.walkOpt))
 	if err != nil {
 		Die("%s", err)
 	}
+}
+
+type cloneopt struct {
+	src string
+	dst string
+
+	prog clone.Observer
+
+	walkOpt walk.Options
+}
+
+func dump[K comparable, V any](pref string, m *xsync.MapOf[K, V]) string {
+	var b strings.Builder
+
+	dumpx(&b, pref, m)
+	return b.String()
+}
+
+func dumpx[K comparable, V any](b *strings.Builder, pref string, m *xsync.MapOf[K, V]) {
+	if m.Size() <= 0 {
+		return
+	}
+
+	if len(pref) > 0 {
+		fmt.Fprintf(b, "%s:\n", pref)
+	}
+	m.Range(func(k K, _ V) bool {
+		fmt.Fprintf(b, "\t%s\n", k)
+		return true
+	})
+}
+
+func printdiff(d *cmp.Difference) {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "-- Differences --\n")
+	dumpx(&b, "New Dirs", d.LeftDirs)
+	dumpx(&b, "New Files", d.LeftFiles)
+
+	dumpx(&b, "Modified files", d.Diff)
+
+	dumpx(&b, "Delete dirs", d.RightDirs)
+	dumpx(&b, "Delete files", d.RightDirs)
+
+	os.Stdout.WriteString(b.String())
 }
 
 func usage(fs *flag.FlagSet) {
