@@ -22,8 +22,8 @@ var Z = path.Base(os.Args[0])
 
 func main() {
 	var help, ver bool
-	var progress, apply bool
-	var onefs, follow bool
+	var verbose, progress, apply bool
+	var onefs, follow, stats bool
 	var ncpu int = runtime.NumCPU()
 
 	fs := flag.NewFlagSet(Z, flag.ExitOnError)
@@ -36,6 +36,8 @@ func main() {
 	fs.IntVarP(&ncpu, "concurrency", "c", ncpu, "Use upto `N` concurrent CPUs [auto-detect]")
 	fs.BoolVarP(&follow, "follow-symlinks", "L", false, "Follow symlinks [False]")
 	fs.BoolVarP(&onefs, "single-file-system", "x", false, "Don't cross file-system mount points [False]")
+	fs.BoolVarP(&stats, "show-stats", "s", false, "Show clone statistics in the end [False]")
+	fs.BoolVarP(&verbose, "verbose", "v", false, "Show verbose progress messages [False]")
 
 	fs.SetOutput(os.Stdout)
 
@@ -79,10 +81,20 @@ func main() {
 		Die("%s is not a dir", dst)
 	}
 
+	// if both are set, pick verbosity
+	if verbose && progress {
+		progress = false
+	}
+
+	pb, err := progressBar(progress, withStats(stats), withVerbose(verbose))
+	if err != nil {
+		Die("can't make progress bar: %s", err)
+	}
+
 	o := &cloneopt{
 		src:  src,
 		dst:  dst,
-		prog: progressBar(progress),
+		prog: pb,
 		walkOpt: walk.Options{
 			Concurrency:    ncpu,
 			Type:           walk.ALL,
@@ -95,6 +107,8 @@ func main() {
 	if err != nil {
 		Die("%s", err)
 	}
+
+	pb.complete(os.Stdout)
 }
 
 type cloneopt struct {
