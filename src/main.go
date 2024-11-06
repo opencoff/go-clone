@@ -157,7 +157,7 @@ func printdiff(d *cmp.Difference) {
 }
 
 func usage(fs *flag.FlagSet) {
-	fmt.Printf(usageStr, Z, Z)
+	fmt.Printf(usageStr, Z, Z, Z)
 	fs.PrintDefaults()
 	os.Exit(1)
 }
