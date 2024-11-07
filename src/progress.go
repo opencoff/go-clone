@@ -22,9 +22,8 @@ type progress struct {
 
 	verbose func(s string, a ...interface{}) (int, error)
 
-	totbar *ysmrr.Spinner
-	cpbar  *ysmrr.Spinner
-	rmbar  *ysmrr.Spinner
+	line0 *ysmrr.Spinner
+	line1 *ysmrr.Spinner
 
 	newfiles int // files + dirs
 	same     int
@@ -38,9 +37,13 @@ type progress struct {
 
 	cp atomic.Int64
 	rm atomic.Int64
+
+	nsrc atomic.Int64
+	ndst atomic.Int64
 }
 
 var _ clone.Observer = &progress{}
+var _ cmp.Observer = &progress{}
 
 type progressOption func(p *progress)
 
@@ -59,15 +62,16 @@ func withVerbose(verb bool) progressOption {
 }
 
 func progressBar(showProgress bool, opts ...progressOption) (*progress, error) {
-	var sm ysmrr.SpinnerManager
-
-	if showProgress {
-		sm = ysmrr.NewSpinnerManager()
+	p := &progress{
+		verbose: func(s string, a ...any) (int, error) { return len(s), nil },
 	}
 
-	p := &progress{
-		pb:      sm,
-		verbose: func(s string, a ...any) (int, error) { return len(s), nil },
+	if showProgress {
+		p.pb = ysmrr.NewSpinnerManager()
+		p.line0 = p.pb.AddSpinner(fmt.Sprintf("Scanning src .."))
+		p.line1 = p.pb.AddSpinner(fmt.Sprintf("Scanning dst .."))
+
+		go p.pb.Start()
 	}
 
 	for _, fp := range opts {
@@ -75,6 +79,18 @@ func progressBar(showProgress bool, opts ...progressOption) (*progress, error) {
 	}
 
 	return p, nil
+}
+
+func (p *progress) VisitSrc(_ *fio.Info) {
+	n := p.nsrc.Add(1)
+	s := fmt.Sprintf("Scanning src .. %d", n)
+	p.line0.UpdateMessage(s)
+}
+
+func (p *progress) VisitDst(_ *fio.Info) {
+	n := p.ndst.Add(1)
+	s := fmt.Sprintf("Scanning dst .. %d", n)
+	p.line1.UpdateMessage(s)
 }
 
 func (p *progress) Difference(d *cmp.Difference) {
@@ -110,11 +126,9 @@ func (p *progress) Difference(d *cmp.Difference) {
 	p.chgsz += adds
 
 	// Now we can add the other bars
-	if sm := p.pb; sm != nil {
-		p.cpbar = sm.AddSpinner(fmt.Sprintf("Copying  files .. %d", 0))
-		p.rmbar = sm.AddSpinner(fmt.Sprintf("Deleting files .. %d", 0))
-
-		go sm.Start()
+	if p.pb != nil {
+		p.line0.UpdateMessage("Copying  files ..")
+		p.line1.UpdateMessage("Deleting files ..")
 	}
 }
 
@@ -126,10 +140,10 @@ func (p *progress) complete(wr io.Writer) {
 		utils.HumanizeSize(p.unchgsz))
 
 	if p.pb != nil {
-		p.cpbar.CompleteWithMessage(files)
-		p.rmbar.CompleteWithMessage(bytes)
+		p.line0.CompleteWithMessage(files)
+		p.line1.CompleteWithMessage(bytes)
 		p.pb.Stop()
-	} else if p.showStats {
+	} else if p.showStats && wr != nil {
 		fmt.Fprintf(wr, "%s\n", files)
 		fmt.Fprintf(wr, "%s\n", bytes)
 	}
@@ -140,7 +154,7 @@ func (p *progress) Copy(dst, src string) {
 	n := p.cp.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Copying files .. %d", n)
-		p.cpbar.UpdateMessage(s)
+		p.line0.UpdateMessage(s)
 	}
 }
 
@@ -149,7 +163,7 @@ func (p *progress) Delete(nm string) {
 	n := p.cp.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Deleting files .. %d", n)
-		p.cpbar.UpdateMessage(s)
+		p.line1.UpdateMessage(s)
 	}
 }
 

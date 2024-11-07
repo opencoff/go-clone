@@ -21,4 +21,4 @@ require (
 	golang.org/x/term v0.15.0 // indirect
 )
 
-//replace github.com/opencoff/go-fio => ../go-fio
+replace github.com/opencoff/go-fio => ../go-fio

@@ -23,7 +23,7 @@ var Z = path.Base(os.Args[0])
 func main() {
 	var help, ver bool
 	var verbose, progress, apply bool
-	var onefs, follow, stats bool
+	var onefs, follow, stats, ign bool
 	var ncpu int = runtime.NumCPU()
 
 	fs := flag.NewFlagSet(Z, flag.ExitOnError)
@@ -38,6 +38,7 @@ func main() {
 	fs.BoolVarP(&onefs, "single-file-system", "x", false, "Don't cross file-system mount points [False]")
 	fs.BoolVarP(&stats, "show-stats", "s", false, "Show clone statistics in the end [False]")
 	fs.BoolVarP(&verbose, "verbose", "v", false, "Show verbose progress messages [False]")
+	fs.BoolVarP(&ign, "ignore-missing", "", false, "Ignore files that suddenly disappear [False]")
 
 	fs.SetOutput(os.Stdout)
 
@@ -91,33 +92,27 @@ func main() {
 		Die("can't make progress bar: %s", err)
 	}
 
-	o := &cloneopt{
-		src:  src,
-		dst:  dst,
-		prog: pb,
-		walkOpt: walk.Options{
-			Concurrency:    ncpu,
-			Type:           walk.ALL,
-			FollowSymlinks: follow,
-			OneFS:          onefs,
-		},
+	wo := walk.Options{
+		Concurrency:    ncpu,
+		Type:           walk.ALL,
+		FollowSymlinks: follow,
+		OneFS:          onefs,
 	}
 
-	err = clone.Tree(o.dst, o.src, clone.WithObserver(o.prog), clone.WithWalkOptions(o.walkOpt))
-	if err != nil {
-		Die("%s", err)
+	if apply {
+		err = clone.Tree(dst, src, clone.WithObserver(pb), clone.WithWalkOptions(wo), clone.WithIgnoreMissing(ign))
+		if err != nil {
+			Die("%s", err)
+		}
+
+		pb.complete(os.Stdout)
+	} else {
+		d, err := cmp.DirTree(src, dst, cmp.WithWalkOptions(wo))
+		if err != nil {
+			Die("%s", err)
+		}
+		printDiff(d)
 	}
-
-	pb.complete(os.Stdout)
-}
-
-type cloneopt struct {
-	src string
-	dst string
-
-	prog clone.Observer
-
-	walkOpt walk.Options
 }
 
 func dump[K comparable, V any](pref string, m *xsync.MapOf[K, V]) string {
@@ -141,10 +136,9 @@ func dumpx[K comparable, V any](b *strings.Builder, pref string, m *xsync.MapOf[
 	})
 }
 
-func printdiff(d *cmp.Difference) {
+func printDiff(d *cmp.Difference) {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "-- Differences --\n")
 	dumpx(&b, "New Dirs", d.LeftDirs)
 	dumpx(&b, "New Files", d.LeftFiles)
 
