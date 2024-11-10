@@ -107,7 +107,7 @@ func main() {
 
 		pb.complete(os.Stdout)
 	} else {
-		d, err := cmp.DirTree(src, dst, cmp.WithWalkOptions(wo))
+		d, err := cmp.FsTree(src, dst, cmp.WithWalkOptions(wo))
 		if err != nil {
 			Die("%s", err)
 		}

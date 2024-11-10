@@ -4,7 +4,7 @@ go 1.22.2
 
 require (
 	github.com/chelnak/ysmrr v0.4.0
-	github.com/opencoff/go-fio v0.4.2
+	github.com/opencoff/go-fio v0.5.0
 	github.com/opencoff/go-utils v1.0.0
 	github.com/opencoff/pflag v1.0.6-sh1
 	github.com/puzpuzpuz/xsync/v3 v3.4.0
@@ -21,4 +21,4 @@ require (
 	golang.org/x/term v0.15.0 // indirect
 )
 
-replace github.com/opencoff/go-fio => ../go-fio
+//replace github.com/opencoff/go-fio => ../go-fio

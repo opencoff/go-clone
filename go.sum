@@ -9,8 +9,8 @@ github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovk
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
-github.com/opencoff/go-fio v0.4.2 h1:eTw9utX11w30iHliDYCqB75/MgkUzQnjH8ZGqnh3YSI=
-github.com/opencoff/go-fio v0.4.2/go.mod h1:np1RuF73f9A8Gf6gc3PrQmBIaVEjqsILnKkzudl1T44=
+github.com/opencoff/go-fio v0.5.0 h1:q0F2bSbQPOvrJAMP95nopjAMDNPhcXJ+PUz25a2c588=
+github.com/opencoff/go-fio v0.5.0/go.mod h1:np1RuF73f9A8Gf6gc3PrQmBIaVEjqsILnKkzudl1T44=
 github.com/opencoff/go-mmap v0.1.3 h1:pKFPIJlVk7jvgwnWKLsfvMTefcSiUdiL4ycaFpjzI0M=
 github.com/opencoff/go-mmap v0.1.3/go.mod h1:+UjRnKQ3l5dLqSNAczz7zKI8LJ7mBhJhaSqU4S91tFs=
 github.com/opencoff/go-utils v1.0.0 h1:hgAjR95JBAnSitK3HzGDtpcGHrcciy2gerlWAiEuOJo=
