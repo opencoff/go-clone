@@ -158,6 +158,15 @@ func (p *progress) Copy(dst, src string) {
 	}
 }
 
+func (p *progress) Link(dst, src string) {
+	p.verbose("# ln %q %q\n", src, dst)
+	n := p.cp.Add(1)
+	if p.pb != nil {
+		s := fmt.Sprintf("Copying files .. %d", n)
+		p.line0.UpdateMessage(s)
+	}
+}
+
 func (p *progress) Delete(nm string) {
 	p.verbose("# rm -f %q\n", nm)
 	n := p.cp.Add(1)
@@ -171,7 +180,7 @@ func (p *progress) MetadataUpdate(dst, src string) {
 	p.verbose("# touch --from %q %q\n", src, dst)
 }
 
-func count0(m *cmp.FioMap) uint64 {
+func count0(m *fio.FioMap) uint64 {
 	var sz uint64
 
 	m.Range(func(_ string, fi *fio.Info) bool {
@@ -184,8 +193,8 @@ func count0(m *cmp.FioMap) uint64 {
 }
 
 // count diff bytes
-func count1(m *cmp.FioPairMap) (add uint64, del uint64) {
-	m.Range(func(_ string, p cmp.Pair) bool {
+func count1(m *fio.FioPairMap) (add uint64, del uint64) {
+	m.Range(func(_ string, p fio.Pair) bool {
 		if p.Src.IsRegular() {
 			add += uint64(p.Src.Size())
 			del += uint64(p.Dst.Size())
@@ -196,10 +205,10 @@ func count1(m *cmp.FioPairMap) (add uint64, del uint64) {
 }
 
 // count common bytes
-func count2(m *cmp.FioPairMap) uint64 {
+func count2(m *fio.FioPairMap) uint64 {
 	var sz uint64
 
-	m.Range(func(_ string, p cmp.Pair) bool {
+	m.Range(func(_ string, p fio.Pair) bool {
 		if p.Src.IsRegular() {
 			sz += uint64(p.Src.Size())
 		}
