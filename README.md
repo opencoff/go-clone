@@ -23,17 +23,17 @@ for other platforms welcome.
 ## Usage with examples
 `clone` supports the following options:
 
-  -c, --concurrency N        Use upto N concurrent CPUs [auto-detect]
-  -n, --dry-run              Show the changes without making them [False]
-  -X, --exclude strings      Excludes files/dirs matching the shell glob pattern
-  -L, --follow-symlinks      Follow symlinks [False]
-  -h, --help                 Show help and exit [False]
-      --ignore-missing       Ignore files that suddenly disappear [False]
-  -p, --progress             Show progress bar [False]
-  -s, --show-stats           Show clone statistics in the end [False]
-  -x, --single-file-system   Don't cross file-system mount points [False]
-  -v, --verbose              Show verbose progress messages [False]
-      --version              Show version info and exit [False]
+      -c, --concurrency N        Use upto N concurrent CPUs [auto-detect]
+      -n, --dry-run              Show the changes without making them [False]
+      -X, --exclude strings      Excludes files/dirs matching the shell glob pattern
+      -L, --follow-symlinks      Follow symlinks [False]
+      -h, --help                 Show help and exit [False]
+          --ignore-missing       Ignore files that suddenly disappear [False]
+      -p, --progress             Show progress bar [False]
+      -s, --show-stats           Show clone statistics in the end [False]
+      -x, --single-file-system   Don't cross file-system mount points [False]
+      -v, --verbose              Show verbose progress messages [False]
+          --version              Show version info and exit [False]
 
 By default, clone like other unix tools is quiet; for interactive uses, one
 can ask to see some statistics or see progress. eg.,
