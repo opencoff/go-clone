@@ -1,4 +1,15 @@
 // main.go - main for clone
+//
+// (c) 2024- Sudhi Herle <sudhi@herle.net>
+//
+// Licensing Terms: GPLv2
+//
+// If you need a commercial license for this work, please contact
+// the author.
+//
+// This software does not come with any express or implied
+// warranty; it is provided "as is". No claim  is made to its
+// suitability for any purpose.
 
 package main
 
@@ -13,7 +24,6 @@ import (
 	"github.com/opencoff/go-fio/clone"
 	"github.com/opencoff/go-fio/cmp"
 	"github.com/opencoff/go-fio/walk"
-	"github.com/puzpuzpuz/xsync/v3"
 
 	flag "github.com/opencoff/pflag"
 )
@@ -22,16 +32,17 @@ var Z = path.Base(os.Args[0])
 
 func main() {
 	var help, ver bool
-	var verbose, progress, apply bool
+	var verbose, progress, dryrun bool
 	var onefs, follow, stats, ign bool
 	var ncpu int = runtime.NumCPU()
+	var excl []string
 
 	fs := flag.NewFlagSet(Z, flag.ExitOnError)
 
 	fs.BoolVarP(&help, "help", "h", false, "Show help and exit [False]")
 	fs.BoolVarP(&ver, "version", "", false, "Show version info and exit [False]")
 	fs.BoolVarP(&progress, "progress", "p", false, "Show progress bar [False]")
-	fs.BoolVarP(&apply, "apply", "", false, "Make the changes [False]")
+	fs.BoolVarP(&dryrun, "dry-run", "n", false, "Show the changes without making them [False]")
 
 	fs.IntVarP(&ncpu, "concurrency", "c", ncpu, "Use upto `N` concurrent CPUs [auto-detect]")
 	fs.BoolVarP(&follow, "follow-symlinks", "L", false, "Follow symlinks [False]")
@@ -39,6 +50,7 @@ func main() {
 	fs.BoolVarP(&stats, "show-stats", "s", false, "Show clone statistics in the end [False]")
 	fs.BoolVarP(&verbose, "verbose", "v", false, "Show verbose progress messages [False]")
 	fs.BoolVarP(&ign, "ignore-missing", "", false, "Ignore files that suddenly disappear [False]")
+	fs.StringSliceVarP(&excl, "exclude", "X", []string{}, "Excludes files/dirs matching the shell glob pattern")
 
 	fs.SetOutput(os.Stdout)
 
@@ -94,12 +106,13 @@ func main() {
 
 	wo := walk.Options{
 		Concurrency:    ncpu,
-		Type:           walk.ALL,
 		FollowSymlinks: follow,
 		OneFS:          onefs,
+		Type:           walk.ALL,
+		Excludes:       excl,
 	}
 
-	if apply {
+	if !dryrun {
 		err = clone.Tree(dst, src, clone.WithObserver(pb), clone.WithWalkOptions(wo), clone.WithIgnoreMissing(ign))
 		if err != nil {
 			Die("%s", err)
@@ -115,37 +128,48 @@ func main() {
 	}
 }
 
-func dump[K comparable, V any](pref string, m *xsync.MapOf[K, V]) string {
-	var b strings.Builder
-
-	dumpx(&b, pref, m)
-	return b.String()
-}
-
-func dumpx[K comparable, V any](b *strings.Builder, pref string, m *xsync.MapOf[K, V]) {
-	if m.Size() <= 0 {
-		return
-	}
-
-	if len(pref) > 0 {
-		fmt.Fprintf(b, "%s:\n", pref)
-	}
-	m.Range(func(k K, _ V) bool {
-		fmt.Fprintf(b, "\t%s\n", k)
-		return true
-	})
-}
-
 func printDiff(d *cmp.Difference) {
 	var b strings.Builder
 
-	dumpx(&b, "New Dirs", d.LeftDirs)
-	dumpx(&b, "New Files", d.LeftFiles)
+	dump0 := func(b *strings.Builder, pref string, m *fio.FioMap) {
+		if m.Size() <= 0 {
+			return
+		}
 
-	dumpx(&b, "Modified files", d.Diff)
+		m.Range(func(nm string, _ *fio.Info) bool {
+			fmt.Fprintf(b, "# %s %s/%s\n", pref, d.Dst, nm)
+			return true
+		})
+	}
 
-	dumpx(&b, "Delete dirs", d.RightDirs)
-	dumpx(&b, "Delete files", d.RightDirs)
+	dump1 := func(b *strings.Builder, pref string, m *fio.FioMap) {
+		if m.Size() <= 0 {
+			return
+		}
+
+		m.Range(func(nm string, _ *fio.Info) bool {
+			fmt.Fprintf(b, "# %s %s/%s %s/%s\n", pref, d.Src, nm, d.Dst, nm)
+			return true
+		})
+	}
+
+	dump2 := func(b *strings.Builder, pref string, m *fio.FioPairMap) {
+		if m.Size() <= 0 {
+			return
+		}
+
+		m.Range(func(nm string, p fio.Pair) bool {
+			fmt.Fprintf(b, "# %s %s %s\n", pref, p.Src.Name(), p.Dst.Name())
+			return true
+		})
+	}
+
+	dump0(&b, "mkdir -p", d.LeftDirs)
+	dump0(&b, "rm -rf", d.RightDirs)
+	dump0(&b, "rm -f", d.RightFiles)
+
+	dump1(&b, "cp", d.LeftFiles)
+	dump2(&b, "cp", d.Diff)
 
 	os.Stdout.WriteString(b.String())
 }

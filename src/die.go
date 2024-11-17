@@ -1,6 +1,6 @@
-// die.go -- die() and warn()
+// die.go -- die(), warn() and atexit()
 //
-// (c) 2016 Sudhi Herle <sudhi@herle.net>
+// (c) 2022- Sudhi Herle <sudhi@herle.net>
 //
 // Licensing Terms: GPLv2
 //
