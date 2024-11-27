@@ -108,7 +108,7 @@ func (p *progress) spin() {
 	defer p.wg.Done()
 
 	for m := range p.ch {
-		if p.verb && len(m.prog) > 0 {
+		if len(m.prog) > 0 {
 			fmt.Printf("%s\n", m.prog)
 		}
 
@@ -117,7 +117,7 @@ func (p *progress) spin() {
 				p.line0.UpdateMessage(m.l0)
 			}
 			if len(m.l1) > 0 {
-				p.line1.UpdateMessage(m.l0)
+				p.line1.UpdateMessage(m.l1)
 			}
 		}
 	}
@@ -169,8 +169,7 @@ func (p *progress) Difference(d *cmp.Difference) {
 
 	// Now we can add the other bars
 	if p.pb != nil {
-		p.line0.UpdateMessage("Copying  files ..")
-		p.line1.UpdateMessage("Deleting files ..")
+		p.ch <- msg{"", "Copying  files ..", "Deleting files .."}
 	}
 }
 
@@ -195,8 +194,10 @@ func (p *progress) complete() {
 }
 
 func (p *progress) verbose(a string, v ...any) {
-	s := fmt.Sprintf(a, v...)
-	p.ch <- msg{s, "", ""}
+	if p.verb {
+		s := fmt.Sprintf(a, v...)
+		p.ch <- msg{s, "", ""}
+	}
 }
 
 func (p *progress) Copy(dst, src string) {
@@ -204,7 +205,8 @@ func (p *progress) Copy(dst, src string) {
 	n := p.cp.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Copying files .. %d", n)
-		p.line0.UpdateMessage(s)
+		p.ch <- msg{"", s, ""}
+		//p.line0.UpdateMessage(s)
 	}
 }
 
@@ -213,7 +215,8 @@ func (p *progress) Link(dst, src string) {
 	n := p.ln.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Copying files .. %d", n)
-		p.line0.UpdateMessage(s)
+		p.ch <- msg{"", s, ""}
+		//p.line0.UpdateMessage(s)
 	}
 }
 
@@ -222,7 +225,8 @@ func (p *progress) Delete(nm string) {
 	n := p.rm.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Deleting files .. %d", n)
-		p.line1.UpdateMessage(s)
+		p.ch <- msg{"", "", s}
+		//p.line1.UpdateMessage(s)
 	}
 }
 
@@ -231,21 +235,9 @@ func (p *progress) MetadataUpdate(dst, src string) {
 	n := p.md.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Updating files .. %d", n)
-		p.line0.UpdateMessage(s)
+		p.ch <- msg{"", s, ""}
+		//p.line0.UpdateMessage(s)
 	}
-}
-
-const _Width int = 40
-
-func trunc(nm string, w int) string {
-	if len(nm) > w {
-		return nm[len(nm)-w:]
-	}
-
-	if nm[0] == '/' {
-		nm = nm[1:]
-	}
-	return nm
 }
 
 func count0(m *fio.FioMap) uint64 {
