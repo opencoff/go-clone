@@ -15,7 +15,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"sync"
 	"sync/atomic"
 
@@ -28,10 +27,12 @@ import (
 )
 
 type progress struct {
-	pb        ysmrr.SpinnerManager
-	showStats bool
+	pb ysmrr.SpinnerManager
+	wg sync.WaitGroup
+	ch chan msg
 
-	verbose func(s string, a ...interface{}) (int, error)
+	showStats bool
+	verb      bool
 
 	line0 *ysmrr.Spinner
 	line1 *ysmrr.Spinner
@@ -48,6 +49,8 @@ type progress struct {
 
 	cp atomic.Int64
 	rm atomic.Int64
+	ln atomic.Int64
+	md atomic.Int64
 
 	nsrc atomic.Int64
 	ndst atomic.Int64
@@ -67,14 +70,24 @@ func withStats(want bool) progressOption {
 func withVerbose(verb bool) progressOption {
 	return func(p *progress) {
 		if verb {
-			p.verbose = fmt.Printf
+			p.verb = true
 		}
 	}
 }
 
+type msg struct {
+	prog string
+	l0   string
+	l1   string
+}
+
 func progressBar(showProgress bool, opts ...progressOption) (*progress, error) {
 	p := &progress{
-		verbose: func(s string, a ...any) (int, error) { return len(s), nil },
+		ch: make(chan msg, 1),
+	}
+
+	for _, fp := range opts {
+		fp(p)
 	}
 
 	if showProgress {
@@ -85,11 +98,29 @@ func progressBar(showProgress bool, opts ...progressOption) (*progress, error) {
 		go p.pb.Start()
 	}
 
-	for _, fp := range opts {
-		fp(p)
-	}
+	p.wg.Add(1)
+	go p.spin()
 
 	return p, nil
+}
+
+func (p *progress) spin() {
+	defer p.wg.Done()
+
+	for m := range p.ch {
+		if p.verb && len(m.prog) > 0 {
+			fmt.Printf("%s\n", m.prog)
+		}
+
+		if p.pb != nil {
+			if len(m.l0) > 0 {
+				p.line0.UpdateMessage(m.l0)
+			}
+			if len(m.l1) > 0 {
+				p.line1.UpdateMessage(m.l0)
+			}
+		}
+	}
 }
 
 func (p *progress) VisitSrc(_ *fio.Info) {
@@ -143,25 +174,33 @@ func (p *progress) Difference(d *cmp.Difference) {
 	}
 }
 
-func (p *progress) complete(wr io.Writer) {
+func (p *progress) complete() {
 	files := fmt.Sprintf("%d changed, %d deleted, %d added, %d unchanged",
 		p.changed, p.rm.Load(), p.newfiles, p.same)
 	bytes := fmt.Sprintf("%s copied, %s deleted, %s unchanged",
 		utils.HumanizeSize(p.newsz+p.chgsz), utils.HumanizeSize(p.delsz),
 		utils.HumanizeSize(p.unchgsz))
 
+	close(p.ch)
+	p.wg.Wait()
+
 	if p.pb != nil {
 		p.line0.CompleteWithMessage(files)
 		p.line1.CompleteWithMessage(bytes)
 		p.pb.Stop()
-	} else if p.showStats && wr != nil {
-		fmt.Fprintf(wr, "%s\n", files)
-		fmt.Fprintf(wr, "%s\n", bytes)
+	} else if p.showStats {
+		fmt.Printf("%s\n", files)
+		fmt.Printf("%s\n", bytes)
 	}
 }
 
+func (p *progress) verbose(a string, v ...any) {
+	s := fmt.Sprintf(a, v...)
+	p.ch <- msg{s, "", ""}
+}
+
 func (p *progress) Copy(dst, src string) {
-	p.verbose("# cp %q %q\n", src, dst)
+	p.verbose("# cp %q %q", src, dst)
 	n := p.cp.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Copying files .. %d", n)
@@ -170,8 +209,8 @@ func (p *progress) Copy(dst, src string) {
 }
 
 func (p *progress) Link(dst, src string) {
-	p.verbose("# ln %q %q\n", src, dst)
-	n := p.cp.Add(1)
+	p.verbose("# ln %q %q", src, dst)
+	n := p.ln.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Copying files .. %d", n)
 		p.line0.UpdateMessage(s)
@@ -179,8 +218,8 @@ func (p *progress) Link(dst, src string) {
 }
 
 func (p *progress) Delete(nm string) {
-	p.verbose("# rm -f %q\n", nm)
-	n := p.cp.Add(1)
+	p.verbose("# rm -f %q", nm)
+	n := p.rm.Add(1)
 	if p.pb != nil {
 		s := fmt.Sprintf("Deleting files .. %d", n)
 		p.line1.UpdateMessage(s)
@@ -188,7 +227,25 @@ func (p *progress) Delete(nm string) {
 }
 
 func (p *progress) MetadataUpdate(dst, src string) {
-	p.verbose("# touch --from %q %q\n", src, dst)
+	p.verbose("# touch --from %q %q", src, dst)
+	n := p.md.Add(1)
+	if p.pb != nil {
+		s := fmt.Sprintf("Updating files .. %d", n)
+		p.line0.UpdateMessage(s)
+	}
+}
+
+const _Width int = 40
+
+func trunc(nm string, w int) string {
+	if len(nm) > w {
+		return nm[len(nm)-w:]
+	}
+
+	if nm[0] == '/' {
+		nm = nm[1:]
+	}
+	return nm
 }
 
 func count0(m *fio.FioMap) uint64 {

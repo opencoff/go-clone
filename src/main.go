@@ -108,7 +108,7 @@ func main() {
 		Concurrency:    ncpu,
 		FollowSymlinks: follow,
 		OneFS:          onefs,
-		Type:           walk.ALL,
+		Type:           walk.FILE | walk.DIR | walk.SYMLINK,
 		Excludes:       excl,
 	}
 
@@ -118,7 +118,7 @@ func main() {
 			Die("%s", err)
 		}
 
-		pb.complete(os.Stdout)
+		pb.complete()
 	} else {
 		d, err := cmp.FsTree(src, dst, cmp.WithWalkOptions(wo))
 		if err != nil {
