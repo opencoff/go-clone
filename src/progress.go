@@ -1,4 +1,4 @@
-// progress.go -- progress bar for clone
+// progress.go - progess messages
 //
 // (c) 2024- Sudhi Herle <sudhi@herle.net>
 //
@@ -15,142 +15,117 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	uil "github.com/gosuri/uilive"
 	"github.com/opencoff/go-fio"
 	"github.com/opencoff/go-fio/clone"
 	"github.com/opencoff/go-fio/cmp"
 	"github.com/opencoff/go-utils"
-
-	"github.com/chelnak/ysmrr"
 )
 
-type progress struct {
-	pb ysmrr.SpinnerManager
-	wg sync.WaitGroup
-	ch chan msg
+const (
+	_Spinner1 = "-\\|/."
+	_Spinner2 = "__\\|/__"
 
-	showStats bool
-	verb      bool
+	_Spinner = _Spinner2
 
-	line0 *ysmrr.Spinner
-	line1 *ysmrr.Spinner
+	_Spinlen = int64(len(_Spinner))
+)
 
-	newfiles int // files + dirs
-	same     int
-	changed  int
+type ProgressOption func(p *Progress)
 
-	// total bytes
-	newsz   uint64
-	delsz   uint64
-	chgsz   uint64
-	unchgsz uint64
 
-	cp atomic.Int64
-	rm atomic.Int64
-	ln atomic.Int64
-	md atomic.Int64
-
-	nsrc atomic.Int64
-	ndst atomic.Int64
-}
-
-var _ clone.Observer = &progress{}
-var _ cmp.Observer = &progress{}
-
-type progressOption func(p *progress)
-
-func withStats(want bool) progressOption {
-	return func(p *progress) {
-		p.showStats = want
+func WithStats(want bool) ProgressOption {
+	return func(p *Progress) {
+		p.stats = want
 	}
 }
 
-func withVerbose(verb bool) progressOption {
-	return func(p *progress) {
-		if verb {
-			p.verb = true
-		}
+func WithVerbose(verb bool) ProgressOption {
+	return func(p *Progress) {
+		p.verbose = verb
 	}
 }
 
-type msg struct {
-	prog string
-	l0   string
-	l1   string
+// Progress represents a progress bar and verbose message printer
+type Progress struct {
+	src  atomic.Int64
+	dst  atomic.Int64
+	spin atomic.Int64
+	cp   atomic.Int64
+	rm   atomic.Int64
+
+	tot_newd, tot_newf int
+	tot_cp, tot_rm     int
+
+	uiw *uil.Writer
+
+	diff *cmp.Difference
+
+	progbar	bool
+	stats   bool
+	verbose bool
+
+	wg  sync.WaitGroup
+	ch  chan any
 }
 
-func progressBar(showProgress bool, opts ...progressOption) (*progress, error) {
-	p := &progress{
-		ch: make(chan msg, 1),
+// Create a new progress bar with the given options
+func NewProgressBar(show bool, opts ...ProgressOption) (*Progress, error) {
+	p := &Progress{
+		ch: make(chan any, 2),
 	}
 
 	for _, fp := range opts {
 		fp(p)
 	}
 
-	if showProgress {
-		p.pb = ysmrr.NewSpinnerManager()
-		p.line0 = p.pb.AddSpinner(fmt.Sprintf("Scanning src .."))
-		p.line1 = p.pb.AddSpinner(fmt.Sprintf("Scanning dst .."))
-
-		go p.pb.Start()
+	if show {
+		switch IsTTY(os.Stdout) {
+		case true:
+			p.progbar = true
+			p.verbose = false
+		case false:
+			// not being on a TTY is same as having verbose progress messages
+			p.verbose = true
+		}
 	}
 
 	p.wg.Add(1)
-	go p.spin()
+	go p.flusher()
 
 	return p, nil
 }
 
-func (p *progress) spin() {
-	defer p.wg.Done()
+func (p *Progress) Complete() {
+	p.showStats()
 
-	for m := range p.ch {
-		if len(m.prog) > 0 {
-			fmt.Printf("%s\n", m.prog)
-		}
+	close(p.ch)
+	p.wg.Wait()
+}
 
-		if p.pb != nil {
-			if len(m.l0) > 0 {
-				p.line0.UpdateMessage(m.l0)
-			}
-			if len(m.l1) > 0 {
-				p.line1.UpdateMessage(m.l1)
-			}
-		}
+
+func (p *Progress) showStats() {
+	if !p.stats {
+		return
 	}
-}
 
-func (p *progress) VisitSrc(_ *fio.Info) {
-	n := p.nsrc.Add(1)
-	s := fmt.Sprintf("Scanning src .. %d", n)
-	p.line0.UpdateMessage(s)
-}
-
-func (p *progress) VisitDst(_ *fio.Info) {
-	n := p.ndst.Add(1)
-	s := fmt.Sprintf("Scanning dst .. %d", n)
-	p.line1.UpdateMessage(s)
-}
-
-func (p *progress) Difference(d *cmp.Difference) {
-	p.same = d.CommonDirs.Size() + d.CommonFiles.Size()
-	p.newfiles = d.LeftDirs.Size() + d.LeftFiles.Size()
-	p.changed = d.Diff.Size()
-
-	// calc sizes of changes in bytes
+	var cp, rm, same int64
+	var left, right, adds, dels int64
 	var wg sync.WaitGroup
-	var adds, dels uint64
 
+	d := p.diff
 	wg.Add(4)
 	go func() {
-		p.newsz = count0(d.LeftFiles)
+		left = count0(d.LeftFiles)
 		wg.Done()
 	}()
 	go func() {
-		p.delsz = count0(d.RightFiles)
+		right = count0(d.RightFiles)
 		wg.Done()
 	}()
 	go func() {
@@ -158,94 +133,151 @@ func (p *progress) Difference(d *cmp.Difference) {
 		wg.Done()
 	}()
 	go func() {
-		p.unchgsz = count2(d.CommonFiles)
+		same, _ = count1(d.CommonFiles)
 		wg.Done()
 	}()
-
 	wg.Wait()
 
-	p.delsz += dels
-	p.chgsz += adds
+	hh := func(n int64) string {
+		return utils.HumanizeSize(uint64(n))
+	}
 
-	// Now we can add the other bars
-	if p.pb != nil {
-		p.ch <- msg{"", "Copying  files ..", "Deleting files .."}
+	cp = left + adds
+	rm = right + dels
+	s := fmt.Sprintf(`%d added, %d deleted, %d changed, %d unchanged
+%s copied, %s deleted, %s unchanged`,
+		p.tot_newf+p.tot_newd, p.tot_rm, p.tot_cp, d.CommonFiles.Size()+d.CommonDirs.Size(),
+		hh(cp), hh(rm), hh(same))
+
+	if p.progbar {
+		p.ch <- pstr(s)
+	} else {
+		p.ch <- vstr(s)
 	}
 }
 
-func (p *progress) complete() {
-	files := fmt.Sprintf("%d changed, %d deleted, %d added, %d unchanged",
-		p.changed, p.rm.Load(), p.newfiles, p.same)
-	bytes := fmt.Sprintf("%s copied, %s deleted, %s unchanged",
-		utils.HumanizeSize(p.newsz+p.chgsz), utils.HumanizeSize(p.delsz),
-		utils.HumanizeSize(p.unchgsz))
+type	pstr	string
+type	vstr	string
 
-	close(p.ch)
-	p.wg.Wait()
+func (p *Progress) flusher() {
+	var w *uil.Writer
 
-	if p.pb != nil {
-		p.line0.CompleteWithMessage(files)
-		p.line1.CompleteWithMessage(bytes)
-		p.pb.Stop()
-	} else if p.showStats {
-		fmt.Printf("%s\n", files)
-		fmt.Printf("%s\n", bytes)
+	if p.progbar {
+		w = uil.New()
+		w.RefreshInterval = 5 * time.Millisecond
+		w.Start()
+	}
+
+	for a := range p.ch {
+		switch s := a.(type) {
+		case pstr:
+			if w != nil {
+				fmt.Fprintln(w, s)
+				w.Flush()
+			}
+
+		case vstr:
+			fmt.Println(s)
+		}
+	}
+	if w != nil {
+		w.Stop()
+	}
+	p.wg.Done()
+}
+
+func (p *Progress) v(s string, v ...any) {
+	if p.verbose {
+		z := fmt.Sprintf(s, v...)
+		p.ch <- vstr(z)
 	}
 }
 
-func (p *progress) verbose(a string, v ...any) {
-	if p.verb {
-		s := fmt.Sprintf(a, v...)
-		p.ch <- msg{s, "", ""}
+func (p *Progress) p(s string, v ...any) {
+	if p.progbar {
+		n := p.spin.Add(1) % _Spinlen
+		c := _Spinner[n]
+		s := fmt.Sprintf("%s %c", s, c)
+		z := fmt.Sprintf(s, v...)
+		p.ch <- pstr(z)
 	}
 }
 
-func (p *progress) Copy(dst, src string) {
-	p.verbose("# cp %q %q", src, dst)
-	n := p.cp.Add(1)
-	if p.pb != nil {
-		s := fmt.Sprintf("Copying files .. %d", n)
-		p.ch <- msg{"", s, ""}
-		//p.line0.UpdateMessage(s)
-	}
+var _ clone.Observer = &Progress{}
+var _ cmp.Observer = &Progress{}
+
+func (p *Progress) VisitSrc(_ *fio.Info) {
+	n := p.src.Add(1)
+	m := p.dst.Load()
+	p.p("clone: scanning src %d, dst %d ..", n, m)
 }
 
-func (p *progress) Link(dst, src string) {
-	p.verbose("# ln %q %q", src, dst)
-	n := p.ln.Add(1)
-	if p.pb != nil {
-		s := fmt.Sprintf("Copying files .. %d", n)
-		p.ch <- msg{"", s, ""}
-		//p.line0.UpdateMessage(s)
-	}
+func (p *Progress) VisitDst(_ *fio.Info) {
+	n := p.src.Load()
+	m := p.dst.Add(1)
+	p.p("clone: scanning src %d, dst %d ..", n, m)
 }
 
-func (p *progress) Delete(nm string) {
-	p.verbose("# rm -f %q", nm)
-	n := p.rm.Add(1)
-	if p.pb != nil {
-		s := fmt.Sprintf("Deleting files .. %d", n)
-		p.ch <- msg{"", "", s}
-		//p.line1.UpdateMessage(s)
-	}
+func (p *Progress) Difference(d *cmp.Difference) {
+	p.diff = d
+	p.tot_cp = d.LeftDirs.Size() + d.LeftFiles.Size() + d.Diff.Size()
+	p.tot_rm = d.RightDirs.Size() + d.RightFiles.Size()
+
+	p.p("clone: cp 0/%d, rm 0/%d", p.tot_cp, p.tot_rm)
 }
 
-func (p *progress) MetadataUpdate(dst, src string) {
-	p.verbose("# touch --from %q %q", src, dst)
-	n := p.md.Add(1)
-	if p.pb != nil {
-		s := fmt.Sprintf("Updating files .. %d", n)
-		p.ch <- msg{"", s, ""}
-		//p.line0.UpdateMessage(s)
-	}
+func (p *Progress) Mkdir(dst string) {
+	cp := p.cp.Add(1)
+	rm := p.rm.Load()
+
+	p.p("clone: cp %d/%d, rm %d/%d", cp, p.tot_cp, rm, p.tot_rm)
+	p.v("# mkdir -p %q", dst)
 }
 
-func count0(m *fio.FioMap) uint64 {
-	var sz uint64
+func (p *Progress) Copy(dst, src string) {
+	cp := p.cp.Add(1)
+	rm := p.rm.Load()
+
+	p.p("clone: cp %d/%d, rm %d/%d", cp, p.tot_cp, rm, p.tot_rm)
+	p.v("# mkdir -p %q", dst)
+}
+
+func (p *Progress) Link(dst, src string) {
+	// just show the spinner
+	cp := p.cp.Load()
+	rm := p.rm.Load()
+
+	p.p("clone: cp %d/%d, rm %d/%d", cp, p.tot_cp, rm, p.tot_rm)
+	p.v("# ln  %q %q", src, dst)
+}
+
+func (p *Progress) Delete(dst string) {
+	cp := p.cp.Load()
+	rm := p.rm.Add(1)
+
+	p.p("clone: cp %d/%d, rm %d/%d", cp, p.tot_cp, rm, p.tot_rm)
+	p.v("# rm -f %q", dst)
+}
+
+func (p *Progress) MetadataUpdate(dst, src string) {
+	cp := p.cp.Load()
+	rm := p.rm.Load()
+
+	p.p("clone: cp %d/%d, rm %d/%d", cp, p.tot_cp, rm, p.tot_rm)
+	p.v("# touch -f %q %q", src, dst)
+}
+
+
+func count0(m *fio.FioMap) int64 {
+	var sz int64
+
+	if m == nil {
+		return 0
+	}
 
 	m.Range(func(_ string, fi *fio.Info) bool {
 		if fi.IsRegular() {
-			sz += uint64(fi.Size())
+			sz += fi.Size()
 		}
 		return true
 	})
@@ -253,26 +285,27 @@ func count0(m *fio.FioMap) uint64 {
 }
 
 // count diff bytes
-func count1(m *fio.FioPairMap) (add uint64, del uint64) {
+func count1(m *fio.FioPairMap) (add int64, del int64) {
+	if m == nil {
+		return 0, 0
+	}
+
 	m.Range(func(_ string, p fio.Pair) bool {
 		if p.Src.IsRegular() {
-			add += uint64(p.Src.Size())
-			del += uint64(p.Dst.Size())
+			add += p.Src.Size()
+			del += p.Dst.Size()
 		}
 		return true
 	})
 	return add, del
 }
 
-// count common bytes
-func count2(m *fio.FioPairMap) uint64 {
-	var sz uint64
+func IsTTY(fd *os.File) bool {
+	st, err := fd.Stat()
+	if err != nil {
+		return false
+	}
 
-	m.Range(func(_ string, p fio.Pair) bool {
-		if p.Src.IsRegular() {
-			sz += uint64(p.Src.Size())
-		}
-		return true
-	})
-	return sz
+	return st.Mode()&os.ModeCharDevice > 0
 }
+

@@ -99,7 +99,7 @@ func main() {
 		progress = false
 	}
 
-	pb, err := progressBar(progress, withStats(stats), withVerbose(verbose))
+	pb, err := NewProgressBar(progress, WithStats(stats), WithVerbose(verbose))
 	if err != nil {
 		Die("can't make progress bar: %s", err)
 	}
@@ -118,7 +118,7 @@ func main() {
 			Die("%s", err)
 		}
 
-		pb.complete()
+		pb.Complete()
 	} else {
 		d, err := cmp.FsTree(src, dst, cmp.WithWalkOptions(wo))
 		if err != nil {
