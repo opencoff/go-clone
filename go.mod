@@ -4,7 +4,7 @@ go 1.23.3
 
 require (
 	github.com/gosuri/uilive v0.0.4
-	github.com/opencoff/go-fio v0.5.5
+	github.com/opencoff/go-fio v0.5.6
 	github.com/opencoff/go-utils v1.0.1
 	github.com/opencoff/pflag v1.0.6-sh1
 )
@@ -19,4 +19,4 @@ require (
 	golang.org/x/term v0.27.0 // indirect
 )
 
-replace github.com/opencoff/go-fio => ../go-fio
+//replace github.com/opencoff/go-fio => ../go-fio
