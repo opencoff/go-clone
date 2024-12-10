@@ -38,7 +38,6 @@ const (
 
 type ProgressOption func(p *Progress)
 
-
 func WithStats(want bool) ProgressOption {
 	return func(p *Progress) {
 		p.stats = want
@@ -66,12 +65,12 @@ type Progress struct {
 
 	diff *cmp.Difference
 
-	progbar	bool
+	progbar bool
 	stats   bool
 	verbose bool
 
-	wg  sync.WaitGroup
-	ch  chan any
+	wg sync.WaitGroup
+	ch chan any
 }
 
 // Create a new progress bar with the given options
@@ -107,7 +106,6 @@ func (p *Progress) Complete() {
 	close(p.ch)
 	p.wg.Wait()
 }
-
 
 func (p *Progress) showStats() {
 	if !p.stats {
@@ -156,33 +154,37 @@ func (p *Progress) showStats() {
 	}
 }
 
-type	pstr	string
-type	vstr	string
+type pstr string
+type vstr string
 
 func (p *Progress) flusher() {
-	var w *uil.Writer
+	var flush func(s string) = func(s string) {}
+	var stop func() = func() {}
 
 	if p.progbar {
-		w = uil.New()
+		w := uil.New()
 		w.RefreshInterval = 5 * time.Millisecond
 		w.Start()
+		flush = func(s string) {
+			fmt.Fprintln(w, s)
+			w.Flush()
+		}
+		stop = func() {
+			w.Stop()
+		}
 	}
 
 	for a := range p.ch {
 		switch s := a.(type) {
 		case pstr:
-			if w != nil {
-				fmt.Fprintln(w, s)
-				w.Flush()
-			}
+			flush(string(s))
 
 		case vstr:
 			fmt.Println(s)
 		}
 	}
-	if w != nil {
-		w.Stop()
-	}
+
+	stop()
 	p.wg.Done()
 }
 
@@ -267,7 +269,6 @@ func (p *Progress) MetadataUpdate(dst, src string) {
 	p.v("# touch -f %q %q", src, dst)
 }
 
-
 func count0(m *fio.FioMap) int64 {
 	var sz int64
 
@@ -308,4 +309,3 @@ func IsTTY(fd *os.File) bool {
 
 	return st.Mode()&os.ModeCharDevice > 0
 }
-
