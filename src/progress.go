@@ -69,14 +69,16 @@ type Progress struct {
 	stats   bool
 	verbose bool
 
-	wg sync.WaitGroup
-	ch chan any
+	wg    sync.WaitGroup
+	ch    chan any
+	start time.Time
 }
 
 // Create a new progress bar with the given options
 func NewProgressBar(show bool, opts ...ProgressOption) (*Progress, error) {
 	p := &Progress{
-		ch: make(chan any, 2),
+		ch:    make(chan any, 2),
+		start: time.Now().UTC(),
 	}
 
 	for _, fp := range opts {
@@ -136,15 +138,17 @@ func (p *Progress) showStats() {
 	}()
 	wg.Wait()
 
+	now := time.Now().UTC()
+	tot := now.Sub(p.start).Truncate(time.Millisecond)
+
 	hh := func(n int64) string {
 		return utils.HumanizeSize(uint64(n))
 	}
 
 	cp = left + adds
 	rm = right + dels
-	s := fmt.Sprintf(`%d added, %d deleted, %d changed, %d unchanged
-%s copied, %s deleted, %s unchanged`,
-		p.tot_newf+p.tot_newd, p.tot_rm, p.tot_cp, d.CommonFiles.Size()+d.CommonDirs.Size(),
+	s := fmt.Sprintf(`%s: +%d, -%d, ~%d, =%d; +%s, -%s, =%s`,
+		tot.String(), p.tot_newf+p.tot_newd, p.tot_rm, p.tot_cp, d.CommonFiles.Size()+d.CommonDirs.Size(),
 		hh(cp), hh(rm), hh(same))
 
 	if p.progbar {

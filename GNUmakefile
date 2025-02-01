@@ -19,8 +19,11 @@ install: $(progs) $(tooldir)
 		cp $(bindir)/$$p $(tooldir)/ ; \
 	done
 
-$(progs):
+$(progs): go.sum
 	./build -s
+
+go.sum: go.mod
+	go mod tidy
 
 $(tooldir):
 	-mkdir -p $(tooldir)
