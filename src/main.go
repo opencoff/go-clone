@@ -131,7 +131,7 @@ func main() {
 func printDiff(d *cmp.Difference) {
 	var b strings.Builder
 
-	dump0 := func(b *strings.Builder, pref string, m *fio.FioMap) {
+	dump0 := func(b *strings.Builder, pref string, m *fio.Map) {
 		if m.Size() <= 0 {
 			return
 		}
@@ -142,7 +142,7 @@ func printDiff(d *cmp.Difference) {
 		})
 	}
 
-	dump1 := func(b *strings.Builder, pref string, m *fio.FioMap) {
+	dump1 := func(b *strings.Builder, pref string, m *fio.Map) {
 		if m.Size() <= 0 {
 			return
 		}
@@ -153,7 +153,7 @@ func printDiff(d *cmp.Difference) {
 		})
 	}
 
-	dump2 := func(b *strings.Builder, pref string, m *fio.FioPairMap) {
+	dump2 := func(b *strings.Builder, pref string, m *fio.PairMap) {
 		if m.Size() <= 0 {
 			return
 		}

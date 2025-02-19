@@ -1,10 +1,12 @@
 module github.com/opencoff/go-clone
 
-go 1.23.4
+go 1.24.0
+
+//replace github.com/opencoff/go-fio => ../go-fio
 
 require (
 	github.com/gosuri/uilive v0.0.4
-	github.com/opencoff/go-fio v0.5.12
+	github.com/opencoff/go-fio v0.5.13
 	github.com/opencoff/go-utils v1.0.2
 	github.com/opencoff/pflag v1.0.7
 )
@@ -18,5 +20,3 @@ require (
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/term v0.27.0 // indirect
 )
-
-//replace github.com/opencoff/go-fio => ../go-fio

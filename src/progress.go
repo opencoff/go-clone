@@ -273,7 +273,7 @@ func (p *Progress) MetadataUpdate(dst, src string) {
 	p.v("# touch -f %q %q", src, dst)
 }
 
-func count0(m *fio.FioMap) int64 {
+func count0(m *fio.Map) int64 {
 	var sz int64
 
 	if m == nil {
@@ -290,7 +290,7 @@ func count0(m *fio.FioMap) int64 {
 }
 
 // count diff bytes
-func count1(m *fio.FioPairMap) (add int64, del int64) {
+func count1(m *fio.PairMap) (add int64, del int64) {
 	if m == nil {
 		return 0, 0
 	}
