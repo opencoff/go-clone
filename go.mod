@@ -6,7 +6,7 @@ go 1.24.0
 
 require (
 	github.com/gosuri/uilive v0.0.4
-	github.com/opencoff/go-fio v0.5.13
+	github.com/opencoff/go-fio v0.5.14
 	github.com/opencoff/go-utils v1.0.2
 	github.com/opencoff/pflag v1.0.7
 )
