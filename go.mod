@@ -1,12 +1,12 @@
 module github.com/opencoff/go-clone
 
-go 1.25.1
+go 1.25.5
 
 //replace github.com/opencoff/go-fio => ../go-fio
 
 require (
 	github.com/gosuri/uilive v0.0.4
-	github.com/opencoff/go-fio v0.5.15
+	github.com/opencoff/go-fio v0.5.16
 	github.com/opencoff/go-utils v1.0.6
 	github.com/opencoff/pflag v1.0.7
 )
